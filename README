@@ -2,3 +2,7 @@ This is a set of scripts for performing a customized NSX-V to NSX-T migration fo
 
 The proposal calls for using an intermediate NSX-T instance running the built-in Migration Coordinator (let's call this the MC).  The MC will translate all the configurations required from the NSX-V source into MC.  The MC will then transform the names and IDs for these configurations and publish them to the final NSX-T instance.  Because the configuration names and IDs are transformed, this allows for the migration of multiple NSX-V instances into one NSX-T instance.
 
+Files:
+  -connections.py : a general purpose library to connect and make REST API calls to NSX
+  -migrator.py : migration script that copies and transforms configs from the MC to the final destination
+  -network_mappings.json : a sample network mapping JSON, required by migrator.py to map the segments on the MC to the segments on the destination NSX instance 
