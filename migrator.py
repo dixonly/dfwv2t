@@ -116,7 +116,7 @@ class NSXT(object):
                     del d[f]
         return data
 
-    def list(self, api=None, brief=False, display=True, 
+    def list(self, api=None, brief=False, verbose=True,
              removeSearch=False, searchFields=['status'],
              header=None):
         '''
@@ -132,7 +132,7 @@ class NSXT(object):
         r = self.__pageHandler(api=api)
         if removeSearch and '/search/query' in api:
             r = self.removeStatusFromSearchList(data=r, fields=searchFields)
-        if display:
+        if verbose:
             logger.log("API: GET %s" %self.mp.normalizeGmLmApi(api))
             self.jsonPrint(data=r, brief=brief, header=header)
         return r
@@ -336,7 +336,7 @@ def createNewPortMaps(MC, NSX, segments, portMaps, vms, logger):
             logger.log("Segment mapping not found for source segment: %s, %s" %(oldSeg, oldLsp))
             continue
 
-        oldPort=MC.mp.get(api="/policy/api/v1%s"%portMaps['VnicSegPortPaths'][p], verbose=False)
+        oldPort=MC.list(api="/policy/api/v1%s"%portMaps['VnicSegPortPaths'][p], verbose=False)
         if not oldPort:
             logger.log("Port not found in MC for VM %s %s:%s" %(port['moId'], vmId,vindex))
             return None
@@ -370,8 +370,8 @@ def validateSegments(MC, NSX, logger, args):
             return None
 
     logger.log("Retrieving segments from NSX running MC and Destination NSX...")
-    srcSegments=MC.mp.get(api='/policy/api/v1/infra/segments', verbose=False)
-    dstSegments=NSX.mp.get(api='/policy/api/v1/infra/segments', verbose=False)
+    srcSegments=MC.list(api='/policy/api/v1/infra/segments', verbose=False)
+    dstSegments=NSX.list(api='/policy/api/v1/infra/segments', verbose=False)
     logger.log("Validating mapped segments")
     for seg in segments['mappings']:
         srcFound=False
@@ -397,9 +397,9 @@ def validateSegments(MC, NSX, logger, args):
 
 def processContextProfiles(MC, NSX, logger, args):
     logger.log("Retrieving list of context profiles created by Migration Coordinator...")
-    vCtx = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=PolicyContextProfile', verbose=False)
+    vCtx = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=PolicyContextProfile', verbose=False)
 
-    dCtx = NSX.mp.get(api='/policy/api/v1/infra/context-profiles', verbose=False)
+    dCtx = NSX.list(api='/policy/api/v1/infra/context-profiles', verbose=False)
 
     ctxApis={}
     ctxApis['resource'] = "PolicyContextProfile"
@@ -414,7 +414,7 @@ def processContextProfiles(MC, NSX, logger, args):
             logger.log("WARN skipping migration of /infra/context-profiles/APP_POP2")
             continue
         found=False
-        mcCtx = MC.mp.get(api='/policy/api/v1'+path, verbose=False)
+        mcCtx = MC.list(api='/policy/api/v1'+path, verbose=False)
         for d in dCtx['results']:
             if compare_ctx(mcCtx, d, nameCheck=args.serviceNameCheck):
                 logger.log("Found source ctx: %s in dest: %s"%(path, d['path']))
@@ -531,10 +531,10 @@ def compare_attribute_entry(src, dst):
 def processServices(MC, NSX, logger, args):
 
     logger.log("Retrieving list of services created by Migration Coordinator...")
-    VServices = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Service', verbose=False)
+    VServices = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Service', verbose=False)
 
     logger.log("Retrieving list of all services from destination NSX: %s ..." %args.nsx)
-    destServices = NSX.mp.get(api='/policy/api/v1/infra/services', verbose=False)
+    destServices = NSX.list(api='/policy/api/v1/infra/services', verbose=False)
     
     logger.log("Checking to see if destination NSX already has configuration for migrated service")
     notFound = 0
@@ -544,7 +544,7 @@ def processServices(MC, NSX, logger, args):
     for i in VServices['results']:
         path = i['path']
         found=False
-        mcService = MC.mp.get(api='/policy/api/v1'+path, verbose=False)
+        mcService = MC.list(api='/policy/api/v1'+path, verbose=False)
         for d in destServices['results']:
             if compare_service(mcService,d, nameCheck=args.serviceNameCheck):
                 logger.log("Found source: %s in dest: %s" %(path,d['path']))
@@ -644,11 +644,11 @@ def updateGroupPaths(groups, logger, args):
                                                          
 def processGroups(MC, NSX, logger, args):
     logger.log("Retrieving list of Groups created by Migration Coordinator...")
-    vGroups = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Group', verbose=False)
+    vGroups = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Group', verbose=False)
     logger.log("Retrieving list of temporary groups created by Migration Coordinator...")
-    tmpGroups = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_temporary&filter_text=Group', verbose=False)
+    tmpGroups = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_temporary&filter_text=Group', verbose=False)
     logger.log("Retrieving list of all Groups from destination NSX: %s ..." %args.nsx)
-    destServices = NSX.mp.get(api='/policy/api/v1/infra/domains/default/groups', verbose=False)
+    destServices = NSX.list(api='/policy/api/v1/infra/domains/default/groups', verbose=False)
 
 
     logger.log("Reading in storage.json file: %s" %args.storageJson)
@@ -724,7 +724,7 @@ def processGroups(MC, NSX, logger, args):
 
         if not foundGM:
             logger.log("Group %s not found in storage.json, reading from MC and adding to mappings" %g['path'])
-            newData=MC.mp.get(api="%s%s" % ("/policy/api/v1",g['path']), verbose=False)
+            newData=MC.list(api="%s%s" % ("/policy/api/v1",g['path']), verbose=False)
             newGM ={}
             newGM['url'] = g['path']
             newGM['api'] = {}
@@ -906,13 +906,13 @@ def findNewProfile(profile, profilelist):
 
 def processPolicies(MC, NSX, services, contexts, groups, logger, args):
     logger.log("Retrieving list of policies created by MC")
-    mcPolicies = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=SecurityPolicy', verbose=False)
+    mcPolicies = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=SecurityPolicy', verbose=False)
 
     policiesApi = {}
     policiesApi['resources']='SecurityPolicy'
     policiesApi['data'] = []
     for mcp in mcPolicies['results']:
-        p = MC.mp.get(api="/policy/api/v1%s" %mcp['path'], verbose=False)
+        p = MC.list(api="/policy/api/v1%s" %mcp['path'], verbose=False)
         logger.log("Updating policy %s" %p['path'])
         policyName, policyPath, policyId = transformPath(p['display_name'],
                                                          p['path'],
@@ -972,7 +972,7 @@ def processPolicies(MC, NSX, services, contexts, groups, logger, args):
                 if not nsvc:
                     logger.log("Policy %s - can't find migrated service %s for rule services...checking destination for pre-existing services"
                                %(p['path'], r['services'][i]))
-                    dsvc = NSX.mp.get(api="/policy/api/v1%s" %r['services'][i], verbose=False)
+                    dsvc = NSX.list(api="/policy/api/v1%s" %r['services'][i], verbose=False)
                     if 'error_code' in dsvc.keys():
                         logger.log("WARN Policy %s uses a service %s in rule that doesn't exist"
                                    %(p['path'], r['services'][i]))
@@ -988,7 +988,7 @@ def processPolicies(MC, NSX, services, contexts, groups, logger, args):
                 if not nsvc:
                     logger.log("Policy %s - can't find migrated service %s for rule services...checking destination for pre-existing services"
                                %(p['path'], r['services'][i]))
-                    dsvc = NSX.mp.get(api="/policy/api/v1%s" %r['services'][i], verbose=False)
+                    dsvc = NSX.list(api="/policy/api/v1%s" %r['services'][i], verbose=False)
                     if 'error_code' in dsvc.keys():
                         logger.log("WARN Policy %s uses a service %s in rule that doesn't exist"
                                    %(p['path'], r['services'][i]))
@@ -1005,7 +1005,7 @@ def processPolicies(MC, NSX, services, contexts, groups, logger, args):
                 if not nsvc:
                     logger.log("Policy %s - can't find migrated context profile  %s for rule ctx...checking destination for pre-existing ctx profiles"
                                %(p['path'], r['profiles'][i]))
-                    dsvc = NSX.mp.get(api="/policy/api/v1%s" %r['profiles'][i], verbose=False)
+                    dsvc = NSX.list(api="/policy/api/v1%s" %r['profiles'][i], verbose=False)
                     if 'error_code' in dsvc.keys():
                         logger.log("WARN Policy %s uses a ctx profile %s in rule that doesn't exist"
                                    %(p['path'], r['profiles'][i]))
@@ -1072,10 +1072,10 @@ def main():
     logger.log("Connected to %s with user %s" % (args.nsx, args.nsxUser), verbose=True)
 
     logger.log("Retrieving list of services created by Migration Coordinator...", verbose=True)
-    VServices = MC.mp.get(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Service', verbose=False)
+    VServices = MC.list(api='/policy/api/v1/infra/tags/effective-resources?scope=v_origin&filter_text=Service', verbose=False)
 
     logger.log("Retrieving list of all services from destination NSX: %s ..." %args.nsx, verbose=True)
-    destServices = NSX.mp.get(api='/policy/api/v1/infra/services', verbose=False)
+    destServices = NSX.list(api='/policy/api/v1/infra/services', verbose=False)
 
     logger.log("Processing services", verbose=True)
     serviceApis=processServices(MC, NSX, logger, args)
@@ -1089,6 +1089,7 @@ def main():
     policyApis = processPolicies(MC, NSX, serviceApis['data'],
                                ctxApis['data'], groupMappings['groupMappings'],
                                logger, args)
+
 
     # order of creation: services->ctx profiles->ports->groups->policies
     failedApis = {}
