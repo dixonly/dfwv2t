@@ -1,0 +1,4 @@
+This is a set of scripts for performing a customized NSX-V to NSX-T migration for DFW only.
+
+The proposal calls for using an intermediate NSX-T instance running the built-in Migration Coordinator (let's call this the MC).  The MC will translate all the configurations required from the NSX-V source into MC.  The MC will then transform the names and IDs for these configurations and publish them to the final NSX-T instance.  Because the configuration names and IDs are transformed, this allows for the migration of multiple NSX-V instances into one NSX-T instance.
+

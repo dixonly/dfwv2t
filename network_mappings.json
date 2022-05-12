@@ -1,0 +1,50 @@
+{
+    "mappings": [
+	{
+	    "source": "/infra/segments/Segment-LS0001",
+	    "destination": "/infra/segments/Segment-78.0.1.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0002",
+	    "destination": "/infra/segments/Segment-78.0.2.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0003",
+	    "destination": "/infra/segments/Segment-78.1.1.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0004",
+	    "destination": "/infra/segments/Segment-78.1.2.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0005",
+	    "destination": "/infra/segments/Segment-78.2.1.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0006",
+	    "destination": "/infra/segments/Segment-78.2.2.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0007",
+	    "destination": "/infra/segments/Segment-78.3.1.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0008",
+	    "destination": "/infra/segments/Segment-78.3.2.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0009",
+	    "destination": "/infra/segments/Segment-78.4.1.0"
+	},
+	{
+	    "source": "/infra/segments/Segment-LS0010",
+	    "destination":  "/infra/segments/Segment-78.4.2.0"
+	},
+	{
+	    "source": "/infra/segments/Segment_VLAN2007",
+	    "destination": "/infra/segments/Segment-VLAN2085"
+	}
+    ]
+}
+
+	
