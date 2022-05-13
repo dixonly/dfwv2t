@@ -5,4 +5,33 @@ The proposal calls for using an intermediate NSX-T instance running the built-in
 Files:
   -connections.py : a general purpose library to connect and make REST API calls to NSX
   -migrator.py : migration script that copies and transforms configs from the MC to the final destination
+  -postmigrate.py: Clean up scripts to remove temporary Grouping objects after migration
   -network_mappings.json : a sample network mapping JSON, required by migrator.py to map the segments on the MC to the segments on the destination NSX instance 
+
+
+Migration Overview:
+
+NSXV-1------>MC1------->[migrator.py]------
+                                          |
+NSXV-2------>MC2------->[migrator.py]----------->NSXT
+                                          |
+NSXV-3------>MC3------->[migrator.py]------
+
+
+There'll be an instance of NSX-T Migration Coordinator (MC) per source NSX-V site.  The MC will translate NSX-V DFW related constructs into NSX-T constructs.  However, MC can only migrate configs from one site to another site; there's no support for combining multiple NSX-V sites into one NSXT site.
+
+After the MC instance has completed the config translation, use migrator.py to migrate the translated configuration to the destination NSXT sites.  Migrator.py will add a user specified source site specific prefix to each configuration entity's name and ID before applying the configs to the destination NSXT in order to prevent configuration conflicts when merging multiple sites into one.
+
+The NSX-T MC creates some temporary nested groups based on IPSets and Segment ports in order to preserve the intended security configurations and postures during migration, especially with respect to dynamic security groups.  In order to maintain security posture in mid-flight on the source NSX-V sites, the MC must be running NSX-T 3.2 or newer because they also add IPSet based memberships to the source sites to ensure the source group memberships and security postures are preserved as VMs are migrated out.
+
+Perform all the steps required for each MC instance up to and including the Prepare Infrastructure stage.  Then run migrator.py to transfer the configs from the MC to the destination.  Note that the the Finalize/Finish steps must not be performed on the MC.
+
+After the DFW configurations have been transferred to the destination by migrator.py, use HCX or vSphere vmotion to migrate the VMs from the source to the destination site.  Note that in order to preserve security, the migration must connect the source vNICs to the Segment ports pre-created by migrator.py.  There's a patch that can be applied to HCX 4.3.2 that provides this capability.  VSphere vmotion must be performed via vSphere API in order to specify the segment port attachment.  The --autovif option to this python script https://github.com/dixonly/samples/blob/main/vmotion.py will migrate the VMs and automatically attach the vNICs to the expected ports.
+
+After the VMs have been migrated, run postmigrate.py to remove the temporary nested security groups.  If you wish to remove the additional IPSet based members from the source NSX-V sites, you can execute the rollback facility within each MC instance.
+
+To execute migrator.py and postmigrate.py, you must have an environment with the required packages.  As an alternative, you can copy these scripts into the root shell of each MC instance and run from there.  Each NSX-T Manager has all the components required by these python scripts.
+
+The scripts create detail log files for auditing, and also create JSON files representing the objects that are transfered to the destination.  The JSON files will also have details on the config transformations along with configuration results, etc.
+
+
