@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import socket
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -9,7 +9,7 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 class NsxConnect(requests.Request):
-    def __init__(self, server, port = 443,
+    def __init__(self, server, logger, port = 443, 
                  user='admin', password=None, access_token=None, cookie=None, 
                  content='application/json', accept='application/json',
                  global_infra=False, global_gm=False,
@@ -44,7 +44,7 @@ class NsxConnect(requests.Request):
         self.site=site
         self.enforcement=enforcement
         self.domain=domain
-
+        self.logger=logger
         self.session = requests.Session()
         
         if self.access_token:
@@ -134,19 +134,19 @@ class NsxConnect(requests.Request):
         Takes dictionary and print output to stdout
         '''
         if data and not isinstance(data,dict):
-            print("Data not a valid dictionary")
+            self.logger.log("Data not a valid dictionary")
             return
         if header and not brief:
             print(header)
         if data:
             if 'results' not in data.keys() or not brief:
-                print(json.dumps(data,indent=indent))
+                self.logger.log(json.dumps(data,indent=indent))
             else:
                 if header:
-                    print("%30s %30s %-s" %("name","id","path"))
-                    print("%30s %30s %-s" %("----------","----------", "----------"))
+                    self.logger.log("%30s %30s %-s" %("name","id","path"))
+                    self.logger.log("%30s %30s %-s" %("----------","----------", "----------"))
                 for i in data['results']:
-                    print("%30s %30s %-s" %(i['display_name'],
+                    self.logger.log("%30s %30s %-s" %(i['display_name'],
                                             i['id'],
                                             i['path'] if 'path' in i.keys() else "-"))
                     
@@ -164,7 +164,7 @@ class NsxConnect(requests.Request):
         '''
         REST API get request
         api - REST API, this will be appended to self.server
-        verbose - if True, will print info about API and results
+        verbose - if True, will log info about API and results
         trial - if True, will not execute the specified called.
                 combine with verbose=true to see what'll be submitted
                 NSX
@@ -173,20 +173,20 @@ class NsxConnect(requests.Request):
         api=self.normalizeGmLmApi(api)
         url = self.server+api
         if verbose:
-            print("API: GET %s" %api)
+            self.logger.log("API: GET %s" %api)
         if not trial:
             r = self.session.get(url, timeout=self.timeout,
                                  **self.requestAttr)
             self.__checkReturnCode(r, codes)
             if verbose:
-                print("result code: %d" % r.status_code)
-                #print(json.dumps(json.loads(r.text), indent=4))
+                self.logger.log("API result code: %d" % r.status_code)
+                #self.logger.log(json.dumps(json.loads(r.text), indent=4))
         else:
             if verbose:
-                print("API not called - in safe mode")
+                self.logger.log("API not called - in safe mode")
             return None
         if display:
-            self.jsonPrint(json.loads(r.text))
+            self.logger.log(json.loads(r.text), jsonData=True)
 
         return json.loads(r.text)
 
@@ -196,7 +196,7 @@ class NsxConnect(requests.Request):
              check entity revision
         api - REST API, this will be appended to self.server
         data - dictionary (not json string) to be submiited
-        verbose - if True, will print info about API and results
+        verbose - if True, will log info about API and results
         trial - if True, will not execute the specified called.
                 combine with verbose=true to see what'll be submitted
                 NSX
@@ -204,19 +204,19 @@ class NsxConnect(requests.Request):
         api=self.normalizeGmLmApi(api=api)
         url=self.server+api
         if verbose:
-            print("API: PATCH %s with data:" %url)
-            print(json.dumps(data, indent=4))
+            self.logger.log("API: PATCH %s with data:" %url)
+            self.logger.log(json.dumps(data, indent=4))
         if not trial:
             r = self.session.patch(url,data=json.dumps(data),
                                    timeout=self.timeout,
                                    **self.requestAttr)
             if verbose:
-                print('result code: %d' %r.status_code)
+                self.logger.log('PATCH API result code: %d' %r.status_code)
                 if r.text:
-                    print(r.text)
+                    self.logger.log(r.text)
         else:
             if verbose:
-                print("API not called - in safe mode")
+                self.logger.log("API not called - in safe mode")
             return None
         self.__checkReturnCode(r, codes)
         return  r
@@ -227,7 +227,7 @@ class NsxConnect(requests.Request):
             contain a revision version that matches current version in NSX
         api - REST API, this will be appended to self.server
         data - dictionary (not json string) to be submiited
-        verbose - if True, will print info about API and results
+        verbose - if True, will log info about API and results
         trial - if True, will not execute the specified called.
                 combine with verbose=true to see what'll be submitted
                 NSX
@@ -236,8 +236,8 @@ class NsxConnect(requests.Request):
         api=self.normalizeGmLmApi(api)
         url=self.server+api
         if verbose:
-            print("API: PUT %s with data:" %url)
-            print(json.dumps(data, indent=4))
+            self.logger.log("API: PUT %s with data:" %url)
+            self.logger.log(json.dumps(data, indent=4))
 
         if not trial:
             r = self.session.put(url, data=json.dumps(data),
@@ -245,37 +245,38 @@ class NsxConnect(requests.Request):
                                  **self.requestAttr)
             self.__checkReturnCode(r, codes)
             if verbose:
-                print('result code: %d' %r.status_code)
+                self.logger.log('result code: %d' %r.status_code)
                 return json.loads(r.text)
         else:
             if verbose:
-                print("API not called - in safe mode")
+                self.logger.log("API not called - in safe mode")
             return None
 
     def delete(self, api, data=None, verbose=True,trial=False,codes=None):
         '''
         REST API delete requests
         api - REST API, this will be appended to self.server
-        verbose - if True, will print info about API and result
+        verbose - if True, will log info about API and result
         trial - if true, will not execute the request
         codes - List of HTTP request status codes for success
         '''
         api=self.normalizeGmLmApi(api)
         url = self.server+api
         if verbose:
-            print("API: DELETE %s" %url)
+            self.logger.log("API: DELETE %s" %url)
         if not trial:
             r = self.session.delete(url,timeout=self.timeout,
                                     data=json.dumps(data), 
                                     **self.requestAttr)
             self.__checkReturnCode(r,codes)
             if verbose:
-                print('result code: %d' %r.status_code)
-                return r.text
+                self.logger.log('API DELETE result code: %d' %r.status_code)
+                # result code from NSX is always true for delete
+                return True
         else:
             if verbose:
-                print("API not alled - in safe mode")
-            return None
+                self.logger.log("API DELETE not called - in safe mode")
+            return False
             
             
     def post(self, api, data=None,verbose=True,trial=False, codes=None, display=False):
@@ -283,35 +284,34 @@ class NsxConnect(requests.Request):
         REST API post requests
         api - REST API, this will be appended to self.server
         data - dictionary (not json string) to be submiited
-        verbose - if True, will print info about API and results
+        verbose - if True, will log info about API and results
         trial - if True, will not execute the specified called.
                 combine with verbose=true to see what'll be submitted
                 NSX
         codes - List of HTTP request status codes for success
         '''
-        print(api)
         api=self.normalizeGmLmApi(api)
         url = self.server+api
-        print(url)
+        self.logger.log(url)
         if verbose:
-            print("API: POST %s with data" %url)
-            print(json.dumps(data, indent=4)) 
+            self.logger.log("API: POST %s with data" %url)
+            self.logger.log(json.dumps(data, indent=4)) 
         if not trial:
             r = self.session.post(url, data=json.dumps(data),
                                   timeout=self.timeout,
                                   **self.requestAttr)
             self.__checkReturnCode(r, codes)
             if verbose:
-                print('result code: %d' %r.status_code)
+                self.logger.log('result code: %d' %r.status_code)
             if r.text:
                 if display:
-                    self.jsonPrint(json.loads(r.text))
+                    self.logger.log(json.loads(r.text), jsonData=True)
                 return json.loads(r.text)
             else:
                 return None
         else:
             if verbose:
-                print("API not called - in safe mode")
+                self.logger.log("API not called - in safe mode")
             return None
 
     def createSessionCookie(self, filename):
@@ -333,7 +333,7 @@ class NsxConnect(requests.Request):
             r = self.session.post(api, data=data, **self.requestAttr)
         
         if 'set-cookie' not in  (k.lower() for k in r.headers.keys()):
-            print("set-cookie not found in header, failure to create session")
+            self.logger.log("set-cookie not found in header, failure to create session")
             return
             
         fp = open(filename, 'w')

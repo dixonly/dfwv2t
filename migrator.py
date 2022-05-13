@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 import connections
 import argparse
@@ -242,10 +242,6 @@ def parseParameters():
                         help="User name to connect to destination NSX Manger")
     parser.add_argument("--nsxPassword", required=False,
                         help="Password for nsxUser")
-
-    parser.add_argument("--apiJson", required=False,
-                        default="/var/log/migration-coordinator/v2t/api.json",
-                        help="api.json file from the Migration Coordinator")
     parser.add_argument("--storageJson", required=False,
                         default="/var/log/migration-coordinator/v2t/storage.json",
                         help="storage.json file from Migration coordinator")
@@ -1047,7 +1043,7 @@ def main():
     
                                 
         
-    mc = connections.NsxConnect(server=args.mc,
+    mc = connections.NsxConnect(server=args.mc, logger=logger,
                                 user=args.mcUser,
                                 password=mcPassword,
                                 cookie=None, cert=None,
@@ -1058,7 +1054,7 @@ def main():
                                 timeout=None)
     MC = NSXT(mp=mc, logger=logger,site=site, enforcementPoint=enforcementPoint)
     logger.log("Connected to %s with user %s" % (args.mc, args.mcUser), verbose=True)
-    nsx = connections.NsxConnect(server=args.nsx,
+    nsx = connections.NsxConnect(server=args.nsx, logger=logger,
                                  user=args.nsxUser,
                                  password=nsxPassword,
                                  cookie=None, cert=None,
@@ -1207,9 +1203,7 @@ def addTag(data, prefix):
 
 def submitApi(NSX, api, data, logger, args):
     data=addTag(data, args.prefix)
-    logger.log("Submitting API %s with body:" % api)
-    logger.log(data, jsonData=True, jheader=True)
-    r = NSX.mp.patch(api=api,data=data,verbose=False, trial=False)
+    r = NSX.mp.patch(api=api,data=data,verbose=True, trial=False)
     if not r or r.status_code != 200:
         logger.log("WARN: API failed with code %s" % str(r.status_code))
         logger.log("WARN: API failure text: %s" % r.text)
