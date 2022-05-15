@@ -7,9 +7,9 @@ import json
 import datetime
 
 class Logger(object):
-    def __init__(self, file, verbose=False):
+    def __init__(self, file, mode='a', verbose=False):
         try:
-            self.fp = open(file, 'a')
+            self.fp = open(file, mode)
         except:
             print("Error opening %s for Logger" %file)
             sys.exit()
@@ -86,6 +86,28 @@ class NSXT(object):
                 return result
             else:
                 cursor=r['cursor']
+                
+    def submitApi(self, api, data, logger, args):
+        req = {}
+        req['method'] = "PATCH"
+        req['api'] = api
+        req['timestamp'] = str(datetime.datetime.utcnow())
+        r = self.mp.patch(api=api,data=data,verbose=True, trial=False)
+        if not r:
+            logger.log("WARN: patch API %s returned no status" %api)
+            req['status_code'] = 0
+            req['message'] = None
+        elif r.status_code != 200:
+            req['status_code'] = r.status_code
+            req['message'] = json.loads(r.text)
+            logger.log("WARN: API failed with code %s" % str(r.status_code))
+            logger.log("WARN: API failure text: %s" % r.text)
+        else:
+            req['status_code'] = r.status_code
+            req['message'] = r.text
+
+        return req
+    
 
     def jsonPrint(self, data, header=None, indent=4, brief=False):
         '''
@@ -249,6 +271,8 @@ def parseParameters():
                         help="JSON file mapping destination segments to segments on MC")
     parser.add_argument("--portMaps", required=True, nargs="*",
                         help="List of directories with VM portmappings")
+    parser.add_argument("--migrationData", required=True,
+                        help="File to store migration data and auditing outptus")
     parser.add_argument("--logfile", required=True,
                         help="Filename to store logs")
     parser.add_argument("--prefix", required=True,
@@ -424,9 +448,11 @@ def processContextProfiles(MC, NSX, logger, args):
             ctx['oldPath'] = mcCtx['path']
             ctxApis['data'].append(ctx)
             notFound+=1
+    '''
     slogger = Logger(file="newContextProfilesApi.json", verbose=False)
     slogger.log(ctxApis, jsonData=True, jheader=False)
     slogger.close()
+    '''
     return ctxApis
 
 def transformCtx(ctx, args):
@@ -555,10 +581,11 @@ def processServices(MC, NSX, logger, args):
             serviceApis['data'].append(svc)
             notFound+=1
             #print("Not found: %s" %path)
+    '''
     slogger = Logger(file="newServicesApi.json", verbose=False)
     slogger.log(serviceApis, jsonData=True, jheader=False)
     slogger.close()
-
+    '''
     return serviceApis
 
 def updatePathExpressions(expression, newExpr):
@@ -672,9 +699,11 @@ def processGroups(MC, NSX, logger, args):
     # create new ports from portMaps
     portsApi = createNewPortMaps(MC, NSX, segments, portMaps,
                               stJ['vm_xlate_mappings']['vm_instance_id_moid_mappings'], logger)
+    '''
     slogger = Logger(file="newPortsApi.json", verbose=False)
     slogger.log(portsApi, jsonData=True, jheader=False)
     slogger.close()
+    '''
     ports = portsApi
     # These cover only groups that MC created with temp ipsets
     logger.log("Updating groups with VM and vNIC static memberships")
@@ -867,14 +896,15 @@ def processGroups(MC, NSX, logger, args):
     # Groups with VM memberships now have port memberships
     # fix paths
     groupMappings=updateGroupPaths(groupMappings, logger, args)
-    
-    slogger = Logger(file="newGroupsApi.json", verbose=False)
     output={}
     output['groupMappings'] = groupMappings
     output['ports'] = portsApi
+
+    '''
+    slogger = Logger(file="newGroupsApi.json", verbose=False)
     slogger.log(output, jsonData=True, jheader=False)
     slogger.close()
-
+    '''
     return output
 
 def findNewGroup(group, grouplist):
@@ -1013,13 +1043,17 @@ def processPolicies(MC, NSX, services, contexts, groups, logger, args):
                     r['profiles'][i] = nsvc
         policiesApi['data'].append(data)
     
-    
+    '''
     slogger = Logger(file="newPoliciesApi.json", verbose=False)
     slogger.log(policiesApi, jsonData=True, jheader=False)
     slogger.close()
+    '''
     return policiesApi                    
-            
-                                                           
+
+def reUpdateMigrationLog(data, filename):
+    slogger=Logger(file=filename, mode="w", verbose=False)
+    slogger.log(data, jsonData=True, jheader=False)
+    slogger.close()
     
 def main():
     args = parseParameters()
@@ -1073,19 +1107,30 @@ def main():
     logger.log("Retrieving list of all services from destination NSX: %s ..." %args.nsx, verbose=True)
     destServices = NSX.list(api='/policy/api/v1/infra/services', verbose=False)
 
+
+    migrationData={}
+    
     logger.log("Processing services", verbose=True)
     serviceApis=processServices(MC, NSX, logger, args)
+    migrationData['services'] = serviceApis
+    
     logger.log("Processing context profiles", verbose=True)
     ctxApis = processContextProfiles(MC, NSX, logger, args)
+    migrationData['contexts'] = ctxApis
+    
     logger.log("Processing ports and groups", verbose=True)
     groupMappings=processGroups(MC, NSX, logger, args)
     ports = groupMappings['ports']
+    migrationData['groups'] = groupMappings['groupMappings']
+    migrationData['ports'] = ports
+    
     
     logger.log("Processing Security Policies", verbose=True)
     policyApis = processPolicies(MC, NSX, serviceApis['data'],
                                ctxApis['data'], groupMappings['groupMappings'],
                                logger, args)
 
+    migrationData['policies'] = policyApis
 
     # order of creation: services->ctx profiles->ports->groups->policies
     failedApis = {}
@@ -1093,10 +1138,17 @@ def main():
     failedApis['data'] = []
     logger.log("Submitting services configurations to destination", verbose=True)
     for api in serviceApis['data']:
+        api['migrate'] = {}
         url = "/policy/api/v1" + api['path']
-        r = submitApi(NSX, url, api['body'], logger, args)
-        if not r:
+        r = NSX.submitApi(url, api['body'], logger, args)
+        if r['status_code'] != 200:
+            logger.log("ERROR - Submission of Service %s did not succeed" %api['path'])
+            api['migrate']['successful'] = False
             failedApis['data'].append(api)
+        else:
+            api['migrate']['successful'] = True
+        api['migrate']['apiResult'] = r
+
 
     if len(failedApis['data']) > 0:
         logger.log("ERROR: Failure to submit %d service APIs" % len(failedApis['data']),
@@ -1109,10 +1161,20 @@ def main():
     failedApis['data'] = []
     logger.log("Submitting Context Profile configurations to destination", verbose=True)
     for api in ctxApis['data']:
+        api['migrate'] = {}
         url = "/policy/api/v1" + api['path']
-        r = submitApi(NSX, url, api['body'], logger, args)
-        if not r:
+        r = NSX.submitApi(url, api['body'], logger, args)
+        if r['status_code'] != 200:
+            logger.log("ERROR - submission for Context Profile %s did not succeed" %api['path'],
+                       verbose=True)
+            api['migrate']['successful'] = False
             failedApis['data'].append(api)
+        else:
+            api['migrate']['successful'] = True
+            
+        api['migrate']['apiResult'] = r
+    ctxApis['failedSubmissions'] = failedApis
+    reUpdateMigrationLog(migrationData, args.migrationData)
 
     if len(failedApis['data']) > 0:
         logger.log("ERROR: Failure to submit %d Context Profile APIs" % len(failedApis['data']),
@@ -1126,11 +1188,21 @@ def main():
     for api in ports:
         port = ports[api]
         for v in port['vnics']:
+            v['migrate'] = {}
             url = "/policy/api/v1" + v['path']
-            r = submitApi(NSX, url, v['data'], logger, args)
-            if not r:
-                failedApis['data'].append(v)
+            r = NSX.submitApi(url, v['data'], logger, args)
 
+            if r['status_code'] != 200:
+                logger.log("ERROR - submission for port %s did not succeed" %api['path'],
+                           verbose=True)
+                v['migrate']['successful'] = False
+                failedApis['data'].append(api)
+            else:
+                v['migrate']['successful'] = True
+            v['migrate']['apiResult'] = r
+    reUpdateMigrationLog(migrationData, args.migrationData)
+
+    ports['failedSubmissions'] = failedApis
     if len(failedApis['data']) > 0:
         logger.log("ERROR: Failure to submit %d SegmentPort APIs" % len(failedApis['data']),
                    verbose=True)
@@ -1142,18 +1214,37 @@ def main():
     # must create temp APIs before main one
     logger.log("Submitting Group configurations to destination", verbose=True)
     for gm in groupMappings['groupMappings']:
+        gm['migrate'] = {}
         if 'temp_apis' in gm.keys():
+            gm['migrate']['temp_apis'] = []
             for tg in gm['temp_apis']:
+                tgResult={}
                 url = "/policy/api/v1" + tg['newUrl']
-                r = submitApi(NSX, url, tg['body'], logger, args)
-                if not r:
-                    failedApis['data'].append(tg)
+                r = NSX.submitApi(url, tg['body'], logger, args)
+                if r['status_code'] != 200:
+                    logger("ERROR - submission for group %s temp_api %s did not succeed"
+                           %(gm['newUrl'], tg))
+                    tgResult['successful'] = False
+                    failedApis['data'].append(api)
+                else:
+                    tgResult['successful'] = True
+                tgResult['apiResult'] = r
+                gm['migrate']['temp_apis'].append(tgResult)
+                    
         if 'api' in gm.keys():
+            gm['migrate']['api'] = {}
             url = "/policy/api/v1" + gm['api']['newUrl']
-            r = submitApi(NSX, url, gm['api']['body'], logger, args)
-            if not r:
+            r = NSX.submitApi( url, gm['api']['body'], logger, args)
+            if r['status_code'] != 200:
+                logger.log("ERROR - submission for group %s did not succeed" %gm['api']['newUrl'])
+                gm['migrate']['api']['successful'] = False
                 failedApis['data'].append(gm['api'])
-                
+            else:
+                gm['migrate']['api']['successful'] = True
+            gm['migrate']['api']['apiResult'] = r
+    reUpdateMigrationLog(migrationData, args.migrationData)
+
+
     if len(failedApis['data']) > 0:
         logger.log("ERROR: Failure to submit %d Group APIs" % len(failedApis['data']),
                    verbose=True)
@@ -1165,16 +1256,23 @@ def main():
     failedApis['data'] = []
     logger.log("Submitting Security Policy configurations to destination", verbose=True)
     for api in policyApis['data']:
+        api['migrate'] = {}
         url = "/policy/api/v1" + api['path']
-        r = submitApi(NSX, url, api['body'], logger, args)
-        if not r:
-            failedApis['data'].append(api)
+        r = NSX.submitApi(url, api['body'], logger, args)
+        if r['status_code'] != 200:
+            logger.log("ERROR - submission for SecurityPolicy %s did not succeed" %api['path'])
+            failedApis['data'] = append(api)
+            api['migrate']['successful'] = False
+        else:
+            api['migrate']['successsful'] = True
+        api['migrate']['apiResult'] = r
+    reUpdateMigrationLog(migrationData, args.migrationData)
 
     if len(failedApis['data']) > 0:
         logger.log("ERROR: Failure to submit %d Security Policy APIs" % len(failedApis['data']),
                    verbose=True)
         sys.exit()
-        
+
 def transformPath(name, path, Oid, prefix, change=True):
     if change:
         pcom = path.split('/')
@@ -1201,16 +1299,6 @@ def addTag(data, prefix):
 
     return data
 
-def submitApi(NSX, api, data, logger, args):
-    data=addTag(data, args.prefix)
-    r = NSX.mp.patch(api=api,data=data,verbose=True, trial=False)
-    if not r or r.status_code != 200:
-        logger.log("WARN: API failed with code %s" % str(r.status_code))
-        logger.log("WARN: API failure text: %s" % r.text)
-        return False
-    else:
-        return True
-    
     
 def transformService(svc, args):
     name,path,nId = transformPath(svc['display_name'], svc['path'],

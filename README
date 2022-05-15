@@ -34,4 +34,55 @@ To execute migrator.py and postmigrate.py, you must have an environment with the
 
 The scripts create detail log files for auditing, and also create JSON files representing the objects that are transfered to the destination.  The JSON files will also have details on the config transformations along with configuration results, etc.
 
+==== migrator.py usage ===============
+
+The --migrationData option specifies a JSON filename to store migration data.  It will contain objects called "services", "contexts", "groups", "ports", and "policies".  Each of these contain the configuration data that will be submitted to the destination NSX; there will be a "migrate" sub-object created for each entity that will show the timestamp and API result of the configuration change submitted.
+
+
+usage: migrator.py [-h] --mc MC [--mcUser MCUSER] [--mcPassword MCPASSWORD] --nsx NSX [--nsxUser NSXUSER] [--nsxPassword NSXPASSWORD] [--storageJson STORAGEJSON] --segmentMap SEGMENTMAP --portMaps
+                   [PORTMAPS ...] --migrationData MIGRATIONDATA --logfile LOGFILE --prefix PREFIX [--serviceNameCheck] [--updateServiceName]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --mc MC               IP or FQDN of the NSX node running Migration Coordinator
+  --mcUser MCUSER       User name to connect to Migration Coordinator, default: admin
+  --mcPassword MCPASSWORD
+                        Password for mcUser
+  --nsx NSX             IP or FQDN of the destination NSX Manager
+  --nsxUser NSXUSER     User name to connect to destination NSX Manger
+  --nsxPassword NSXPASSWORD
+                        Password for nsxUser
+  --storageJson STORAGEJSON
+                        storage.json file from Migration coordinator
+  --segmentMap SEGMENTMAP
+                        JSON file mapping destination segments to segments on MC
+  --portMaps [PORTMAPS ...]
+                        List of directories with VM portmappings
+  --migrationData MIGRATIONDATA
+                        File to store migration data and auditing outptus
+  --logfile LOGFILE     Filename to store logs
+  --prefix PREFIX       Prefix to pretend to all object IDs and names
+  --serviceNameCheck    Enable service and context profile name comparison
+  --updateServiceName   Prepend migrated services and context profile names with prefix
+
+
+
+==== postmigrate.py usage ==============
+
+The --migrationData points to the migration data output from migrator.py.  The postData specifies a file where the cleanup for temporary groups will be stored.  The same data from migrationData will be written to this file; additionally, each "group" will contain a "postMigrate" object that contains the API data and result submitted to the destination to clean up the temporary groups.
+
+usage: postmigrate.py [-h] --nsx NSX [--nsxUser NSXUSER] [--nsxPassword NSXPASSWORD] --migrationData MIGRATIONDATA --postData POSTDATA --prefix PREFIX [--logfile LOGFILE]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --nsx NSX             IP or FQDN of the destination NSX Manager
+  --nsxUser NSXUSER     User name to connect to destination NSX Manger
+  --nsxPassword NSXPASSWORD
+                        Password for nsxUser
+  --migrationData MIGRATIONDATA
+                        The migration data JSON file produced by migrator.py
+  --postData POSTDATA   File to store post migration auditing data
+  --prefix PREFIX       The prefix used for migrator.py
+  --logfile LOGFILE     The prefix used for migrator.py
+
 
