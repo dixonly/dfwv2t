@@ -36,7 +36,7 @@ def addPostMigrateData(entry, group, update):
     entry['postMigrate']['url'] = group['path']
     entry['postMigrate']['update'] = update
         
-def fixExpressions(group):
+def fixExpressions(group, logger):
     if len(group['expression']) == 0:
         return
 
@@ -52,7 +52,11 @@ def fixExpressions(group):
                 group['expression'].remove(e)
             else:
                 con=False
-    
+
+    if len(group['expression']) % 2 == 0:
+        logger.log("ERROR - postmigrate - lenght of group %s expression is even"
+                   % group['path'], verbose=True)
+        logger.log(entry, jsonData=True, verbose=True)
 def processGroups(NSX, groupMaps, groups, logger, args):
     for gm in groupMaps['groups']:
         deleteGroups=[]
@@ -96,7 +100,7 @@ def processGroups(NSX, groupMaps, groups, logger, args):
                             break
                 if found:
                     break
-            fixExpressions(primaryGroup)
+            fixExpressions(primaryGroup, logger)
             if not found:
                 logger.log("Group %s has temporary path %s that's not found in its expressions"
                            %(primaryGroup['path'], dg), verbose=True)
