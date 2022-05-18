@@ -5,6 +5,7 @@ import argparse
 import getpass
 import json
 import datetime
+import time
 
 class Logger(object):
     def __init__(self, file, mode='a', verbose=False):
@@ -120,11 +121,11 @@ class NSXT(object):
             self.logger.log(header)
         if data:
             if 'results' not in data.keys() or not brief:
-                logger.log(data, True)
+                self.logger.log(data, True)
             else:
                 if header:
                     self.logger.log("%30s %30s %-s" %("name","id","path"))
-                    logger.log("%30s %30s %-s" %("----------","----------", "----------"))
+                    self.logger.log("%30s %30s %-s" %("----------","----------", "----------"))
                 for i in data['results']:
                     self.logger.log("%30s %30s %-s" %(i['display_name'],
                                             i['id'],
@@ -169,7 +170,7 @@ class NSXT(object):
                 if self.listApi:
                     api=self.listApi
             if not api:
-                logger.log ("Calling list with no API specified")
+                self.logger.log ("Calling list with no API specified")
                 return None
             data = self.list(api=api,display=False, removeSearch=removeSearch)
         obj = None
@@ -179,8 +180,8 @@ class NSXT(object):
                 break
         if obj and display:
             if brief:
-                logger.log("%d. Name: %s" %(i,obj[field]))
-                logger.log("    Id: %s" %(obj['id']))
+                self.logger.log("%d. Name: %s" %(i,obj[field]))
+                self.logger.log("    Id: %s" %(obj['id']))
             else:
                 self.jsonPrint(data=obj)
         return obj
@@ -194,7 +195,7 @@ class NSXT(object):
                 if self.listApi:
                     api=self.listApi
             if not api:
-                logger.log ("Calling list with no API specified")
+                self.logger.log ("Calling list with no API specified")
                 return None
         data = self.list(api=api,display=False, removeSearch=removeSearch)
         obj = None
@@ -205,8 +206,8 @@ class NSXT(object):
                 break
         if obj and display:
             if brief:
-                logger.log("%d. Name: %s" %(i,obj['display_name']))
-                logger.log("   Id: %s" %(obj['id']))
+                self.logger.log("%d. Name: %s" %(i,obj['display_name']))
+                self.logger.log("   Id: %s" %(obj['id']))
             else:
                 self.jsonPrint(data=obj)
         return obj
@@ -229,7 +230,7 @@ class NSXT(object):
         obj = self.findByName(api=api,name=name, data=data, display=False)
         if obj:
             if display:
-                logger.log(obj['path'])
+                self.logger.log(obj['path'])
             return obj['path']
         return None
 
@@ -243,7 +244,7 @@ class NSXT(object):
         obj = self.findById(api=api,id=id,data=data, display=False)
         if obj:
             if display:
-                logger.log(obj['path'])
+                self.logger.log(obj['path'])
             return obj['path']
         return None
 
@@ -998,44 +999,41 @@ def processPolicies(MC, NSX, services, contexts, groups, logger, args):
                 if not nsvc:
                     logger.log("Policy %s - can't find migrated service %s for rule services...checking destination for pre-existing services"
                                %(p['path'], r['services'][i]))
-                    dsvc = NSX.list(api="/policy/api/v1%s" %r['services'][i], verbose=False)
-                    if 'error_code' in dsvc.keys():
-                        logger.log("WARN Policy %s uses a service %s in rule that doesn't exist"
-                                   %(p['path'], r['services'][i]))
-                        return None
-                    else:
-                        logger.log("Policy %s - pre-existing service %s found"
-                                   %(p['path'], r['services'][i]))
+                    found = False
+                    attempts = 1
+                    while attempts < 10:
+                        dsvc = NSX.list(api="/policy/api/v1%s" %r['services'][i], verbose=False)
+                        if 'error_code' in dsvc.keys():
+                            logger.log("WARN Policy %s uses a service %s in rule that doesn't exist.  Attempt %d of 10" 
+                                       %(p['path'], r['services'][i], attempt), verbse=True)
+                            if attemt != 10:
+                                logger.log("WARN Sleeping 10 seconds for next attempt to find group realization")
+                                time.sleep(10)
+                                continue
+                            else:
+                                return None
+                        else:
+                            logger.log("Policy %s - pre-existing service %s found"
+                                       %(p['path'], r['services'][i]))
+                            found = True
+                            break
                 else:
                     r['services'][i] = nsvc
-            
-            for i in range(len(r['services'])):
-                nsvc = findNewService(r['services'][i], services)
-                if not nsvc:
-                    logger.log("Policy %s - can't find migrated service %s for rule services...checking destination for pre-existing services"
-                               %(p['path'], r['services'][i]))
-                    dsvc = NSX.list(api="/policy/api/v1%s" %r['services'][i], verbose=False)
-                    if 'error_code' in dsvc.keys():
-                        logger.log("WARN Policy %s uses a service %s in rule that doesn't exist"
-                                   %(p['path'], r['services'][i]))
-                        return None
-                    else:
-                        logger.log("Policy %s - pre-existing service %s found"
-                                   %(p['path'], r['services'][i]))
-                else:
-                    r['services'][i] = nsvc
-                    
-                           
+
             for i in range(len(r['profiles'])):
                 nsvc = findNewProfile(r['profiles'][i], contexts)
                 if not nsvc:
                     logger.log("Policy %s - can't find migrated context profile  %s for rule ctx...checking destination for pre-existing ctx profiles"
                                %(p['path'], r['profiles'][i]))
-                    dsvc = NSX.list(api="/policy/api/v1%s" %r['profiles'][i], verbose=False)
-                    if 'error_code' in dsvc.keys():
-                        logger.log("WARN Policy %s uses a ctx profile %s in rule that doesn't exist"
-                                   %(p['path'], r['profiles'][i]))
-                        return None
+                    found=False
+                    attempts = 1
+                    while attempts < 10:
+                        dsvc = NSX.list(api="/policy/api/v1%s" %r['profiles'][i], verbose=False)
+                        if 'error_code' in dsvc.keys():
+                            logger.log("WARN Policy %s uses a ctx profile %s in rule that doesn't exist, attempt %d of 10"
+                                       %(p['path'], r['profiles'][i], attempt))
+                        
+                            return None
                     else:
                         logger.log("Policy %s - pre-existing ctx profile %s found"
                                    %(p['path'], r['profiles'][i]))
@@ -1130,6 +1128,9 @@ def main():
                                ctxApis['data'], groupMappings['groupMappings'],
                                logger, args)
 
+    if not policyApis:
+        logger.log("ERROR - policy")
+        system.exit()
     migrationData['policies'] = policyApis
 
     # order of creation: services->ctx profiles->ports->groups->policies

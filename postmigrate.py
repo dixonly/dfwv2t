@@ -43,25 +43,32 @@ def fixExpressions(group, logger):
     for e in group['expression'][:]:
         if e['resource_type'] == "PathExpression":
             if len(e['paths']) == 0:
+                logger.log("Deleting path %s from expression in group %s because there are no elements"
+                           %(e, group['path']))
                 group['expression'].remove(e)
 
     con = True
     for e in group['expression'][:]:
         if e['resource_type'] == 'ConjunctionOperator':
             if con:
+                logger.log("DEBUG Removing conjuction from %s" %group['path'], verbose=True)
                 group['expression'].remove(e)
-            else:
-                con=False
+        else:
+            con=False
 
     if len(group['expression']) % 2 == 0:
         logger.log("ERROR - postmigrate - lenght of group %s expression is even"
                    % group['path'], verbose=True)
-        logger.log(entry, jsonData=True, verbose=True)
+        logger.log(group, jsonData=True, verbose=True)
 def processGroups(NSX, groupMaps, groups, logger, args):
     for gm in groupMaps['groups']:
         deleteGroups=[]
         logger.log("Checking group %s for temp groups" %gm['newUrl'], verbose=True)
         primaryGroup = NSX.list(api='/policy/api/v1'+gm['newUrl'], verbose=False)
+        if 'error_code' in primaryGroup:
+            logger.log("ERROR - cannot find group %s in destination" %gm['newUrl'], verbose=True)
+            logger.log(primaryGroup, jsonData=True, verbose=False)
+            continue
         
         if 'new_internal_paths_to_delete' not in gm.keys():
             logger.log("Group %s does not have any temporary groups for clean up" % gm['newUrl'], False)
@@ -91,20 +98,17 @@ def processGroups(NSX, groupMaps, groups, logger, args):
             found=False
             for e in primaryGroup['expression']:
                 if e['resource_type'] == 'PathExpression':
-                    for i in range(len(e['paths'])):
-                        if e['paths'][i] == dg:
-                            logger.log("Adding removal of  %s from group %s expressions"
-                                       %(dg, primaryGroup['path']), verbose=True)
-                            e['paths'].remove(dg)
-                            found=True
-                            break
-                if found:
-                    break
-            fixExpressions(primaryGroup, logger)
+                    if dg in e['paths']:
+                        logger.log("Adding removal of  %s from group %s expressions"
+                                   %(dg, primaryGroup['path']), verbose=True)
+                        e['paths'].remove(dg)
+                        found=True
+                        break
             if not found:
                 logger.log("Group %s has temporary path %s that's not found in its expressions"
                            %(primaryGroup['path'], dg), verbose=True)
-
+        fixExpressions(primaryGroup, logger)
+                
         logger.log("Updated group %s content: " %primaryGroup['path'], verbose=False)
         logger.log(primaryGroup, jsonData=True, jheader=True, verbose=False)
         addPostMigrateData( gm, primaryGroup, True)

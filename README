@@ -6,6 +6,7 @@ Files:
   -connections.py : a general purpose library to connect and make REST API calls to NSX
   -migrator.py : migration script that copies and transforms configs from the MC to the final destination
   -postmigrate.py: Clean up scripts to remove temporary Grouping objects after migration
+  -getVmInstanceId.py: A script to retrieve VM inventory and create JSON payload for pre_migrate API
   -network_mappings.json : a sample network mapping JSON, required by migrator.py to map the segments on the MC to the segments on the destination NSX instance 
 
 
@@ -37,6 +38,10 @@ The scripts create detail log files for auditing, and also create JSON files rep
 ==== migrator.py usage ===============
 
 The --migrationData option specifies a JSON filename to store migration data.  It will contain objects called "services", "contexts", "groups", "ports", and "policies".  Each of these contain the configuration data that will be submitted to the destination NSX; there will be a "migrate" sub-object created for each entity that will show the timestamp and API result of the configuration change submitted.
+
+The storageJson points to a file called "storage.json" that is created by the Migration Coordinator; this is located in /var/log/migration-coordinator/v2t directory on the NSX Manager node running MC.
+
+The portMap files are created by submitting the list of VM objects to the MC's pre-migrate api: POST /api/v1/migration/vmgroup?action=pre_migrate.  This repository contains a python script called getVmInstanceId.py that will connect to VCenter to retrieve the VM intentory and produce a JSON output that can be used as payload to submit with the pre_migrate API.
 
 
 usage: migrator.py [-h] --mc MC [--mcUser MCUSER] [--mcPassword MCPASSWORD] --nsx NSX [--nsxUser NSXUSER] [--nsxPassword NSXPASSWORD] [--storageJson STORAGEJSON] --segmentMap SEGMENTMAP --portMaps
