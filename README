@@ -7,7 +7,10 @@ Files:
   -migrator.py : migration script that copies and transforms configs from the MC to the final destination
   -postmigrate.py: Clean up scripts to remove temporary Grouping objects after migration
   -getVmInstanceId.py: A script to retrieve VM inventory and create JSON payload for pre_migrate API
-  -network_mappings.json : a sample network mapping JSON, required by migrator.py to map the segments on the MC to the segments on the destination NSX instance 
+  -network_mappings.json : a sample network mapping JSON, required by migrator.py to map the segments on the MC to the segments on the destination NSX instance
+
+
+Check the beginning of these python scripts to get the list of required packages.  If you do not have access to a Linux host with these packages, you can run them on the root shell of the NSX Manager running Migration Coordinator - all of the required packages already exist on the Manager appliance.
 
 
 Migration Overview:
