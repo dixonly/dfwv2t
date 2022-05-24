@@ -271,7 +271,7 @@ def parseParameters():
     parser.add_argument("--segmentMap", required=True,
                         help="JSON file mapping destination segments to segments on MC")
     parser.add_argument("--portMaps", required=True, nargs="*",
-                        help="List of directories with VM portmappings")
+                        help="List of map files  with VM portmappings")
     parser.add_argument("--migrationData", required=True,
                         help="File to store migration data and auditing outptus")
     parser.add_argument("--logfile", required=True,
